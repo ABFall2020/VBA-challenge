@@ -1,0 +1,227 @@
+Sub ProcessAllSheets()
+    Dim ws As Worksheet
+
+    ' Loop through all sheets in the workbook
+    For Each ws In ThisWorkbook.Sheets
+
+        If WorksheetFunction.CountA(ws.Cells) <> 0 Then
+            ExtractUniqueTickers ws
+            FindGreatestPercentIncrease ws
+            FindGreatestPercentDecrease ws
+            FindGreatestTotalVolume ws
+        End If
+    Next ws
+End Sub
+
+Sub ExtractUniqueTickers(ws As Worksheet)
+    Dim lastRow As Long
+    Dim uniqueTickers As Collection
+    Dim outputRange As Range
+    Dim i As Long
+    Dim tickerCell As Range
+    Dim yearStartRow As Long
+    Dim yearEndRow As Long
+    Dim openPrice As Double
+    Dim closePrice As Double
+    Dim yearlyChange As Double
+    Dim percentChange As Double
+    Dim totalVolume As Double
+
+    ' Find last row in the worksheet
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    ' Create a collection to store unique tickers
+    Set uniqueTickers = New Collection
+    
+    ' Loop through Column A
+    On Error Resume Next ' Ignore errors when adding duplicates to the collection
+    For i = 2 To lastRow ' Data starts from row 2
+        uniqueTickers.Add ws.Cells(i, 1).Value, CStr(ws.Cells(i, 1).Value)
+    Next i
+    On Error GoTo 0 ' Reset error handling
+
+    ' Set the output range in Column I starting from cell I1
+    Set outputRange = ws.Range("I1").Resize(uniqueTickers.Count + 1, 1)
+
+    ' Output header "Ticker" to cell I1
+    outputRange.Cells(1, 1).Value = "Ticker"
+
+    ' Output unique tickers to Column I starting from cell I2
+    For i = 1 To uniqueTickers.Count
+        outputRange.Cells(i + 1, 1).Value = uniqueTickers.Item(i)
+    Next i
+
+    ' Output header "Yearly Change" to cell J1
+    ws.Cells(1, 10).Value = "Yearly Change"
+
+    ' Output header "Percent Change" to cell K1
+    ws.Cells(1, 11).Value = "Percent Change"
+
+    ' Output header "Total Stock Volume" to cell L1
+    ws.Cells(1, 12).Value = "Total Stock Volume"
+
+    ' Loop through each unique ticker to calculate yearly, percent change, and total volume
+    For i = 2 To uniqueTickers.Count + 1
+        ' Get the ticker for the current row
+        Set tickerCell = ws.Cells(i, 9) ' Column I
+
+        ' Find the starting row for the current ticker
+        For j = 2 To lastRow
+            If ws.Cells(j, 1).Value = tickerCell.Value Then
+                yearStartRow = j
+                Exit For
+            End If
+        Next j
+
+        ' Find the ending row for the current ticker
+        For j = lastRow To 2 Step -1
+            If ws.Cells(j, 1).Value = tickerCell.Value Then
+                yearEndRow = j
+                Exit For
+            End If
+        Next j
+
+        ' Get opening and closing prices
+        openPrice = ws.Cells(yearStartRow, 3).Value ' Opening price (open prices are in column C)
+        closePrice = ws.Cells(yearEndRow, 6).Value ' Closing price (close prices are in column F)
+
+        ' Calculate yearly change
+        yearlyChange = closePrice - openPrice
+
+        ' Output yearly change to Column J
+        ws.Cells(i, 10).Value = yearlyChange
+
+        ' Apply conditional formatting to highlight positive numbers in green and negative numbers in red
+        With ws.Cells(i, 10).FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:="0")
+            .Interior.Color = RGB(144, 238, 144) ' Green for positive numbers
+        End With
+
+        With ws.Cells(i, 10).FormatConditions.Add(Type:=xlCellValue, Operator:=xlLess, Formula1:="0")
+            .Interior.Color = RGB(255, 99, 71) ' Red for negative numbers
+        End With
+
+        ' Calculate percent change
+        If openPrice <> 0 Then
+            percentChange = (yearlyChange / openPrice) * 100
+        Else
+            percentChange = 0 ' Avoid division by zero
+        End If
+
+        ' Output percent change to Column K with two decimal places
+        ws.Cells(i, 11).NumberFormat = "0.00%"
+        ws.Cells(i, 11).Value = percentChange / 100 ' Convert percent back to decimal for display
+
+        ' Calculate total volume for the current ticker
+        totalVolume = Application.WorksheetFunction.SumIf(ws.Range("A:A"), tickerCell.Value, ws.Range("G:G"))
+
+        ' Output total volume to Column L
+        ws.Cells(i, 12).Value = totalVolume
+    Next i
+End Sub
+
+Sub FindGreatestPercentIncrease(ws As Worksheet)
+    Dim lastRow As Long
+    Dim maxPercentIncrease As Double
+    Dim maxTicker As String
+    Dim currentPercentChange As Double
+    Dim i As Long
+
+    ' Find the last row in the worksheet
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    ' Initialize variables
+    maxPercentIncrease = 0
+    maxTicker = ""
+
+    ' Loop through each row in Column K
+    For i = 2 To lastRow
+        ' Get the current percent change value
+        currentPercentChange = ws.Cells(i, 11).Value
+
+        ' Check if the current value is greater than the current maximum
+        If currentPercentChange > maxPercentIncrease Then
+            maxPercentIncrease = currentPercentChange
+            ' Get the corresponding ticker abbreviation from Column I
+            maxTicker = ws.Cells(i, 9).Value
+        End If
+    Next i
+
+    ' Output the results to Cells O2, P2, and Q2
+    ws.Cells(2, 15).Value = "Greatest % Increase" ' Cell O2
+    ws.Cells(2, 16).Value = maxTicker ' Cell P2
+    ws.Cells(2, 17).Value = maxPercentIncrease ' Cell Q2
+    ws.Cells(2, 17).NumberFormat = "0.00%" ' Format Q2 as percentage
+End Sub
+
+Sub FindGreatestPercentDecrease(ws As Worksheet)
+    Dim lastRow As Long
+    Dim minPercentDecrease As Double
+    Dim minTicker As String
+    Dim currentPercentChange As Double
+    Dim i As Long
+
+    ' Find the last row in the worksheet
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    ' Initialize variables
+    minPercentDecrease = 0
+    minTicker = ""
+
+    ' Loop through each row in Column K
+    For i = 2 To lastRow
+        ' Get the current percent change value
+        currentPercentChange = ws.Cells(i, 11).Value
+
+        ' Check if the current value is less than the current minimum
+        If currentPercentChange < minPercentDecrease Then
+            minPercentDecrease = currentPercentChange
+            ' Get the corresponding ticker abbreviation from Column I
+            minTicker = ws.Cells(i, 9).Value
+        End If
+    Next i
+
+    ' Output the results to Cells O3, P3, and Q3
+    ws.Cells(3, 15).Value = "Greatest % Decrease" ' Cell O3
+    ws.Cells(3, 16).Value = minTicker ' Cell P3
+    ws.Cells(3, 17).Value = minPercentDecrease ' Cell Q3
+    ws.Cells(3, 17).NumberFormat = "0.00%" ' Format Q3 as percentage
+End Sub
+
+Sub FindGreatestTotalVolume(ws As Worksheet)
+    Dim lastRow As Long
+    Dim maxTotalVolume As Double
+    Dim maxVolumeTicker As String
+    Dim currentVolume As Double
+    Dim i As Long
+
+    ' Find the last row in the worksheet
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    ' Initialize variables
+    maxTotalVolume = 0
+    maxVolumeTicker = ""
+
+    ' Loop through each row in Column L
+    For i = 2 To lastRow
+        ' Get the current total volume value
+        currentVolume = ws.Cells(i, 12).Value
+
+        ' Check if the current value is greater than the current maximum
+        If currentVolume > maxTotalVolume Then
+            maxTotalVolume = currentVolume
+            ' Get the corresponding ticker abbreviation from Column I
+            maxVolumeTicker = ws.Cells(i, 9).Value
+        End If
+    Next i
+
+    ' Output the results to Cells O4, P4, and Q4
+    ws.Cells(4, 15).Value = "Greatest Total Volume" ' Cell O4
+    ws.Cells(4, 16).Value = maxVolumeTicker ' Cell P4
+    ws.Cells(4, 17).Value = maxTotalVolume ' Cell Q4
+
+    ' Additional labels
+    ws.Cells(1, 16).Value = "Ticker" ' Cell P1
+    ws.Cells(1, 17).Value = "Value" ' Cell Q1
+End Sub
+
+
